@@ -88,10 +88,19 @@ class FloatingOverlayService : Service() {
         runCatching{wm.addView(box,lp);panel=box}
     }
 
+    private fun hasFreeformSupport():Boolean {
+        val pm=packageManager
+        if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
+        return pm.hasSystemFeature("android.software.freeform_window_management") ||
+            Settings.Global.getInt(contentResolver,"enable_freeform_support",0)==1 ||
+            Settings.Global.getInt(contentResolver,"force_resizable_activities",0)==1
+    }
+
     private fun launchApp(pkg:String){
         val i=packageManager.getLaunchIntentForPackage(pkg) ?: return
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
         try{
+            if(!hasFreeformSupport()) { startActivity(i); return }
             val w=resources.displayMetrics.widthPixels; val h=resources.displayMetrics.heightPixels
             val r=Rect((w*.08f).toInt(),(h*.12f).toInt(),(w*.92f).toInt(),(h*.86f).toInt())
             val o=ActivityOptions.makeBasic()
