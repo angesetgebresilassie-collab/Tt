@@ -41,9 +41,9 @@ class FloatingOverlayService : Service() {
 
     private fun showHandle() {
         val v=TextView(this).apply {
-            text="↙"; textSize=25f; gravity=Gravity.CENTER; setTextColor(Color.WHITE)
+            text="↙"; textSize=18f; gravity=Gravity.CENTER; setTextColor(Color.WHITE)
             typeface=Typeface.DEFAULT_BOLD
-            background=rounded(Color.rgb(28,29,32),24)
+            background=rounded(Color.rgb(28,29,32),16)
             elevation=dp(8).toFloat()
             contentDescription="Open floating apps"
             setOnTouchListener { _,e ->
@@ -61,9 +61,9 @@ class FloatingOverlayService : Service() {
                 }
             }
         }
-        val lp=WindowManager.LayoutParams(dp(72),dp(48),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        val lp=WindowManager.LayoutParams(dp(48),dp(34),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,PixelFormat.TRANSLUCENT).apply {
-            gravity=Gravity.TOP or Gravity.END; x=dp(10); y=dp(28)
+            gravity=Gravity.TOP or Gravity.END; x=dp(6); y=dp(20)
         }
         runCatching { wm.addView(v,lp); handle=v }.onFailure { stopSelf() }
     }
@@ -122,14 +122,22 @@ class FloatingOverlayService : Service() {
         }
 
         try {
-            startActivity(bootstrap,bootstrapOptions.toBundle())
+            val options=ActivityOptions.makeBasic().apply {
+                launchBounds=Rect((w*.08f).toInt(),(h*.12f).toInt(),(w*.92f).toInt(),(h*.86f).toInt())
+                // Android keeps this API hidden on some releases; use it when available.
+                // Windowing mode 5 is the platform FREEFORM mode.
+                runCatching {
+                    val m=ActivityOptions::class.java.getMethod("setLaunchWindowingMode",Int::class.javaPrimitiveType)
+                    m.invoke(this,5)
+                }
+            }
+            startActivity(launch,options.toBundle())
         } catch(_:Throwable) {
-            // Some OEMs reject the bootstrap task; fall back to a direct bounds request.
-            runCatching {
-                val o=ActivityOptions.makeBasic()
-                o.launchBounds=Rect((w*.08f).toInt(),(h*.12f).toInt(),(w*.92f).toInt(),(h*.86f).toInt())
-                startActivity(launch,o.toBundle())
-            }.onFailure { runCatching{startActivity(launch)} }
+            // Fall back to the bootstrap workspace used by Taskbar-style devices.
+            runCatching { startActivity(bootstrap,bootstrapOptions.toBundle()) }
+                .onFailure {
+                    runCatching { startActivity(launch) }
+                }
         }
     }
 
