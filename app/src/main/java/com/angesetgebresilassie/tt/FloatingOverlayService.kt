@@ -2,6 +2,7 @@ package com.angesetgebresilassie.tt
 
 import android.app.*
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.PixelFormat
