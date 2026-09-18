@@ -49,7 +49,13 @@ class FreeformBootstrapActivity : Activity() {
         launched=true
 
         try {
-            val options=ActivityOptions.makeBasic().apply { launchBounds=bounds }
+            val options=ActivityOptions.makeBasic().apply {
+                launchBounds=bounds
+                runCatching {
+                    val m=ActivityOptions::class.java.getMethod("setLaunchWindowingMode",Int::class.javaPrimitiveType)
+                    m.invoke(this,5)
+                }
+            }
             startActivity(launch,options.toBundle())
         } catch(_:Throwable) {
             runCatching { startActivity(launch) }
