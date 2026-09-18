@@ -89,24 +89,47 @@ class FloatingOverlayService : Service() {
     }
 
     private fun hasFreeformSupport():Boolean {
-        val pm=packageManager
         if(Build.VERSION.SDK_INT < Build.VERSION_CODES.N) return false
-        return pm.hasSystemFeature("android.software.freeform_window_management") ||
+        val pm=packageManager
+        return pm.hasSystemFeature(PackageManager.FEATURE_FREEFORM_WINDOW_MANAGEMENT) ||
             Settings.Global.getInt(contentResolver,"enable_freeform_support",0)==1 ||
-            Settings.Global.getInt(contentResolver,"force_resizable_activities",0)==1
+            (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1 &&
+                Settings.Global.getInt(contentResolver,"force_resizable_activities",0)==1)
     }
 
     private fun launchApp(pkg:String){
-        val i=packageManager.getLaunchIntentForPackage(pkg) ?: return
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
-        try{
-            if(!hasFreeformSupport()) { startActivity(i); return }
-            val w=resources.displayMetrics.widthPixels; val h=resources.displayMetrics.heightPixels
-            val r=Rect((w*.08f).toInt(),(h*.12f).toInt(),(w*.92f).toInt(),(h*.86f).toInt())
-            val o=ActivityOptions.makeBasic()
-            o.launchBounds=r
-            startActivity(i,o.toBundle())
-        }catch(_:Throwable){runCatching{startActivity(i)}}
+        val launch=packageManager.getLaunchIntentForPackage(pkg) ?: return
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+
+        if(!hasFreeformSupport()){
+            runCatching { startActivity(launch) }
+            return
+        }
+
+        // Taskbar-style bootstrap: first create an invisible freeform workspace,
+        // then launch the real app from inside that workspace.
+        val bootstrap=Intent(this,FreeformBootstrapActivity::class.java)
+            .putExtra(FreeformBootstrapActivity.EXTRA_PACKAGE,pkg)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NO_ANIMATION)
+
+        val w=resources.displayMetrics.widthPixels
+        val h=resources.displayMetrics.heightPixels
+        val bootstrapOptions=ActivityOptions.makeBasic().apply {
+            // A tiny off-screen-ish bounds request is used only to establish the
+            // freeform task/workspace. The target app gets normal window bounds next.
+            launchBounds=Rect(w,h,w+1,h+1)
+        }
+
+        try {
+            startActivity(bootstrap,bootstrapOptions.toBundle())
+        } catch(_:Throwable) {
+            // Some OEMs reject the bootstrap task; fall back to a direct bounds request.
+            runCatching {
+                val o=ActivityOptions.makeBasic()
+                o.launchBounds=Rect((w*.08f).toInt(),(h*.12f).toInt(),(w*.92f).toInt(),(h*.86f).toInt())
+                startActivity(launch,o.toBundle())
+            }.onFailure { runCatching{startActivity(launch)} }
+        }
     }
 
     private fun closePanel(){panel?.let{runCatching{wm.removeView(it)}};panel=null}
