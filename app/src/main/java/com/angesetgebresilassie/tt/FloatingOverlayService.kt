@@ -14,6 +14,7 @@ import android.provider.Settings
 import android.view.*
 import android.widget.*
 import androidx.core.app.NotificationCompat
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import kotlin.math.abs
 
 class FloatingOverlayService : Service() {
@@ -127,8 +128,12 @@ class FloatingOverlayService : Service() {
                 // Android keeps this API hidden on some releases; use it when available.
                 // Windowing mode 5 is the platform FREEFORM mode.
                 runCatching {
-                    val m=ActivityOptions::class.java.getMethod("setLaunchWindowingMode",Int::class.javaPrimitiveType)
-                    m.invoke(this,5)
+                    HiddenApiBypass.invoke(
+                        ActivityOptions::class.java,
+                        this,
+                        "setLaunchWindowingMode",
+                        5
+                    )
                 }
             }
             startActivity(launch,options.toBundle())
