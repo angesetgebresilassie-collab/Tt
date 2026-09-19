@@ -5,7 +5,7 @@
     <queries><intent><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent></queries>
     <application android:name=".TtApplication" android:theme="@style/AppTheme" android:label="Tt Floating Launcher" android:icon="@drawable/ic_launcher" android:allowBackup="true" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
-        <activity android:name=".FreeformBootstrapActivity" android:theme="@style/FreeformBootstrapTheme" android:exported="false" android:excludeFromRecents="true" android:noHistory="false" android:launchMode="singleTask"/>
+        <activity android:name=".FreeformBootstrapActivity" android:theme="@style/FreeformBootstrapTheme" android:exported="false" android:excludeFromRecents="true" android:noHistory="false" android:launchMode="singleTask" android:resizeableActivity="true"/>
         <service android:name=".FloatingOverlayService" android:exported="false" android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="floating launcher overlay and gesture handle"/>
         </service>

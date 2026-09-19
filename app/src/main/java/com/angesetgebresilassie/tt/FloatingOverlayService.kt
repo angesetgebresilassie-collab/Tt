@@ -100,16 +100,16 @@ class FloatingOverlayService : Service() {
     }
 
     private fun launchApp(pkg:String){
-        val launch=packageManager.getLaunchIntentForPackage(pkg) ?: return
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
-
         if(!hasFreeformSupport()){
+            val launch=packageManager.getLaunchIntentForPackage(pkg) ?: return
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
             runCatching { startActivity(launch) }
             return
         }
 
-        // Taskbar-style bootstrap: first create an invisible freeform workspace,
-        // then launch the real app from inside that workspace.
+        // Always enter through the bootstrap. Starting the target directly first
+        // means Android can silently ignore its freeform ActivityOptions, leaving
+        // the fallback unused and launching the app full-screen.
         val bootstrap=Intent(this,FreeformBootstrapActivity::class.java)
             .putExtra(FreeformBootstrapActivity.EXTRA_PACKAGE,pkg)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or Intent.FLAG_ACTIVITY_NO_ANIMATION)
@@ -117,33 +117,28 @@ class FloatingOverlayService : Service() {
         val w=resources.displayMetrics.widthPixels
         val h=resources.displayMetrics.heightPixels
         val bootstrapOptions=ActivityOptions.makeBasic().apply {
-            // A tiny off-screen-ish bounds request is used only to establish the
-            // freeform task/workspace. The target app gets normal window bounds next.
+            // Request FREEFORM for the bootstrap itself. Bounds alone do not select
+            // a windowing mode on devices that also support full-screen windows.
             launchBounds=Rect(w,h,w+1,h+1)
+            runCatching {
+                HiddenApiBypass.invoke(
+                    ActivityOptions::class.java,
+                    this,
+                    "setLaunchWindowingMode",
+                    5
+                )
+            }
         }
 
-        try {
-            val options=ActivityOptions.makeBasic().apply {
-                launchBounds=Rect((w*.08f).toInt(),(h*.12f).toInt(),(w*.92f).toInt(),(h*.86f).toInt())
-                // Android keeps this API hidden on some releases; use it when available.
-                // Windowing mode 5 is the platform FREEFORM mode.
-                runCatching {
-                    HiddenApiBypass.invoke(
-                        ActivityOptions::class.java,
-                        this,
-                        "setLaunchWindowingMode",
-                        5
-                    )
-                }
-            }
-            startActivity(launch,options.toBundle())
-        } catch(_:Throwable) {
-            // Fall back to the bootstrap workspace used by Taskbar-style devices.
-            runCatching { startActivity(bootstrap,bootstrapOptions.toBundle()) }
-                .onFailure {
+        runCatching { startActivity(bootstrap,bootstrapOptions.toBundle()) }
+            .onFailure {
+                // The requested mode is unavailable despite the device reporting
+                // support; preserve the existing normal-launch fallback.
+                packageManager.getLaunchIntentForPackage(pkg)?.let { launch ->
+                    launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
                     runCatching { startActivity(launch) }
                 }
-        }
+            }
     }
 
     private fun closePanel(){panel?.let{runCatching{wm.removeView(it)}};panel=null}
