@@ -1,4 +1,4 @@
-name: Build Tt APK
+name: Build Tt APk
 
 on:
   push:
