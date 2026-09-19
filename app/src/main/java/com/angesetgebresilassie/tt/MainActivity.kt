@@ -34,7 +34,7 @@ class MainActivity : Activity() {
             setOnClickListener { runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) } }
         })
         root.addView(TextView(this).apply { text="How it works"; textSize=15f; setTextColor(Color.rgb(55,55,60)); setPadding(4,24,4,4) })
-        root.addView(TextView(this).apply { text="Gesture: tap the floating pill or swipe diagonally ↙ from the top-right corner.\n\nFreeform mode: Tt first creates a small invisible bootstrap activity, then launches the selected app with requested window bounds. If the device refuses freeform, Tt falls back to normal Android app launching."; textSize=14f; setTextColor(Color.GRAY); setPadding(8,28,8,8) })
+        root.addView(TextView(this).apply { text="Gesture: tap the floating pill or swipe diagonally ↙ from the top-right corner.\n\nThe floating launcher has macOS-style controls: red closes it, yellow switches to an icon-only launcher, and green restores the full app list. Drag its title bar to move it and use the lower-right grip to resize it.\n\nFreeform mode: Tt first creates a small invisible bootstrap activity, then launches the selected app with requested window bounds. If the device refuses freeform, Tt falls back to normal Android app launching."; textSize=14f; setTextColor(Color.GRAY); setPadding(8,28,8,8) })
         setContentView(root); updateStatus()
     }
 

@@ -16,11 +16,17 @@ import android.widget.*
 import androidx.core.app.NotificationCompat
 import org.lsposed.hiddenapibypass.HiddenApiBypass
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 
 class FloatingOverlayService : Service() {
     private lateinit var wm: WindowManager
     private var handle: View?=null
     private var panel: View?=null
+    private var panelParams: WindowManager.LayoutParams?=null
+    private var compactLauncher=false
+    private var panelWidth=0
+    private var panelHeight=0
     private var downX=0f; private var downY=0f; private var downTime=0L
     private val d get()=resources.displayMetrics.density
 
@@ -70,24 +76,99 @@ class FloatingOverlayService : Service() {
     }
 
     private fun showLauncher() {
-        panel?.let{runCatching{wm.removeView(it)}}
-        val box=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(16),dp(16),dp(16),dp(16));background=rounded(Color.rgb(248,248,250),26)}
-        box.addView(TextView(this).apply{text="Floating Apps";textSize=22f;setTextColor(Color.rgb(25,25,28));setPadding(0,0,0,dp(6))})
-        box.addView(TextView(this).apply{text="Tap the pill again or swipe ↙ to reopen";textSize=12f;setTextColor(Color.GRAY);setPadding(0,0,0,dp(8))})
-        val list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+        closePanel()
+        val box=LinearLayout(this).apply{
+            orientation=LinearLayout.VERTICAL
+            setPadding(dp(12),dp(10),dp(12),dp(12))
+            background=rounded(Color.rgb(248,248,250),26)
+        }
+        val titleBar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),0,dp(2),dp(8)) }
+        titleBar.addView(trafficLight("×", Color.rgb(255,95,86), "Close launcher") { closePanel() })
+        titleBar.addView(trafficLight("–", Color.rgb(255,189,46), "Show icons only") {
+            compactLauncher=true
+            panelWidth=dp(238); panelHeight=dp(320)
+            showLauncher()
+        }, trafficLightLayout())
+        titleBar.addView(trafficLight("+", Color.rgb(39,201,63), "Expand launcher") {
+            compactLauncher=false
+            panelWidth=dp(340); panelHeight=dp(540)
+            showLauncher()
+        }, trafficLightLayout())
+        titleBar.addView(TextView(this).apply {
+            text=if(compactLauncher) "Apps · icons" else "Floating Apps"
+            textSize=compactLauncher.let { if(it) 15f else 20f }
+            typeface=Typeface.DEFAULT_BOLD
+            setTextColor(Color.rgb(25,25,28))
+            setPadding(dp(10),0,0,0)
+        }, LinearLayout.LayoutParams(0,dp(28),1f))
+        box.addView(titleBar)
+        installDrag(titleBar)
+
         val apps=packageManager.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),0)
             .filter{it.activityInfo.packageName!=packageName}.sortedBy{it.loadLabel(packageManager).toString().lowercase()}
-        apps.take(80).forEach{info->
-            val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(8),dp(5),dp(8),dp(5));background=rounded(Color.WHITE,16)}
-            row.addView(ImageView(this).apply{setImageDrawable(info.loadIcon(packageManager))},LinearLayout.LayoutParams(dp(42),dp(42)))
-            row.addView(TextView(this).apply{text=info.loadLabel(packageManager);textSize=16f;setTextColor(Color.DKGRAY);setPadding(dp(12),0,0,0)},LinearLayout.LayoutParams(0,dp(54),1f))
-            row.setOnClickListener{launchApp(info.activityInfo.packageName);closePanel()}
-            list.addView(row,LinearLayout.LayoutParams(-1,dp(60)).apply{bottomMargin=dp(5)})
+        if(compactLauncher) {
+            val grid=GridLayout(this).apply { columnCount=4; useDefaultMargins=true }
+            apps.take(24).forEach { info ->
+                val icon=ImageView(this).apply {
+                    setImageDrawable(info.loadIcon(packageManager))
+                    contentDescription="Launch ${info.loadLabel(packageManager)}"
+                    background=rounded(Color.WHITE,14)
+                    setPadding(dp(8),dp(8),dp(8),dp(8))
+                    setOnClickListener { launchApp(info.activityInfo.packageName); closePanel() }
+                }
+                grid.addView(icon, ViewGroup.LayoutParams(dp(46),dp(46)))
+            }
+            box.addView(grid)
+        } else {
+            box.addView(TextView(this).apply{text="Drag the title bar; resize from the lower-right corner";textSize=12f;setTextColor(Color.GRAY);setPadding(dp(6),0,0,dp(8))})
+            val list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
+            apps.take(80).forEach{info->
+                val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(8),dp(5),dp(8),dp(5));background=rounded(Color.WHITE,16)}
+                row.addView(ImageView(this).apply{setImageDrawable(info.loadIcon(packageManager))},LinearLayout.LayoutParams(dp(42),dp(42)))
+                row.addView(TextView(this).apply{text=info.loadLabel(packageManager);textSize=16f;setTextColor(Color.DKGRAY);setPadding(dp(12),0,0,0)},LinearLayout.LayoutParams(0,dp(54),1f))
+                row.setOnClickListener{launchApp(info.activityInfo.packageName);closePanel()}
+                list.addView(row,LinearLayout.LayoutParams(-1,dp(60)).apply{bottomMargin=dp(5)})
+            }
+            val scroll=ScrollView(this);scroll.addView(list);box.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         }
-        val scroll=ScrollView(this);scroll.addView(list);box.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-        val lp=WindowManager.LayoutParams(dp(340),dp(540),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        val resize=TextView(this).apply { text="◢"; textSize=18f; gravity=Gravity.END; setTextColor(Color.GRAY); contentDescription="Resize launcher" }
+        box.addView(resize,LinearLayout.LayoutParams(-1,dp(24)))
+        val lp=WindowManager.LayoutParams(if(panelWidth>0) panelWidth else dp(340),if(panelHeight>0) panelHeight else dp(540),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT).apply{gravity=Gravity.TOP or Gravity.END;x=dp(8);y=dp(108)}
-        runCatching{wm.addView(box,lp);panel=box}
+        panelWidth=lp.width; panelHeight=lp.height
+        panelParams=lp
+        installResize(resize)
+        runCatching{wm.addView(box,lp);panel=box}.onFailure { panelParams=null }
+    }
+
+    private fun trafficLight(symbol:String, color:Int, description:String, action:()->Unit)=TextView(this).apply {
+        text=symbol; textSize=13f; gravity=Gravity.CENTER; setTextColor(Color.rgb(60,60,60)); typeface=Typeface.DEFAULT_BOLD
+        contentDescription=description; background=rounded(color,20); setOnClickListener { action() }
+        layoutParams=LinearLayout.LayoutParams(dp(20),dp(20))
+    }
+
+    private fun trafficLightLayout()=LinearLayout.LayoutParams(dp(20),dp(20)).apply { leftMargin=dp(6) }
+
+    private fun installDrag(view:View) { var x=0f; var y=0f
+        view.setOnTouchListener { _, event ->
+            val lp=panelParams ?: return@setOnTouchListener false
+            when(event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { x=event.rawX; y=event.rawY; true }
+                MotionEvent.ACTION_MOVE -> { lp.x=max(0,lp.x+(x-event.rawX).toInt()); lp.y=max(0,lp.y+(event.rawY-y).toInt()); x=event.rawX; y=event.rawY; panel?.let { runCatching { wm.updateViewLayout(it,lp) } }; true }
+                else -> true
+            }
+        }
+    }
+
+    private fun installResize(view:View) { var x=0f; var y=0f; var width=0; var height=0
+        view.setOnTouchListener { _, event ->
+            val lp=panelParams ?: return@setOnTouchListener false
+            when(event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> { x=event.rawX; y=event.rawY; width=lp.width; height=lp.height; true }
+                MotionEvent.ACTION_MOVE -> { lp.width=max(dp(180),min(resources.displayMetrics.widthPixels,width+(x-event.rawX).toInt())); lp.height=max(dp(120),min(resources.displayMetrics.heightPixels,height+(event.rawY-y).toInt())); panelWidth=lp.width; panelHeight=lp.height; panel?.let { runCatching { wm.updateViewLayout(it,lp) } }; true }
+                else -> true
+            }
+        }
     }
 
     private fun hasFreeformSupport():Boolean {
@@ -141,7 +222,7 @@ class FloatingOverlayService : Service() {
             }
     }
 
-    private fun closePanel(){panel?.let{runCatching{wm.removeView(it)}};panel=null}
+    private fun closePanel(){panel?.let{runCatching{wm.removeView(it)}};panel=null;panelParams=null}
     private fun rounded(c:Int,r:Int)=GradientDrawable().apply{setColor(c);cornerRadius=dp(r).toFloat()}
     private fun dp(v:Int)=(v*d).toInt()
     override fun onDestroy(){closePanel();handle?.let{runCatching{wm.removeView(it)}};handle=null;super.onDestroy()}
