@@ -7,6 +7,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import android.view.Window
 import android.view.WindowManager
 
@@ -41,7 +42,7 @@ class FreeformBootstrapActivity : Activity() {
         if (launched || isFinishing) return
         val pkg=intent.getStringExtra(EXTRA_PACKAGE) ?: run { finish(); return }
         val launch=packageManager.getLaunchIntentForPackage(pkg) ?: run { finish(); return }
-        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
 
         val w=resources.displayMetrics.widthPixels
         val h=resources.displayMetrics.heightPixels
@@ -52,8 +53,12 @@ class FreeformBootstrapActivity : Activity() {
             val options=ActivityOptions.makeBasic().apply {
                 launchBounds=bounds
                 runCatching {
-                    val m=ActivityOptions::class.java.getMethod("setLaunchWindowingMode",Int::class.javaPrimitiveType)
-                    m.invoke(this,5)
+                    HiddenApiBypass.invoke(
+                        ActivityOptions::class.java,
+                        this,
+                        "setLaunchWindowingMode",
+                        5
+                    )
                 }
             }
             startActivity(launch,options.toBundle())
