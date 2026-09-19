@@ -27,6 +27,8 @@ class FloatingOverlayService : Service() {
     private var compactLauncher=false
     private var panelWidth=0
     private var panelHeight=0
+    private var appChrome: View?=null
+    private var activePackage: String?=null
     private var downX=0f; private var downY=0f; private var downTime=0L
     private val d get()=resources.displayMetrics.density
 
@@ -217,7 +219,7 @@ class FloatingOverlayService : Service() {
             }
         }
 
-        runCatching { startActivity(bootstrap,bootstrapOptions.toBundle()) }
+        runCatching { startActivity(bootstrap,bootstrapOptions.toBundle()); showAppChrome(pkg) }
             .onFailure {
                 // The requested mode is unavailable despite the device reporting
                 // support; preserve the existing normal-launch fallback.
@@ -228,9 +230,55 @@ class FloatingOverlayService : Service() {
             }
     }
 
+    /** Visual chrome for Tt-launched windows. Root users get working close/back controls. */
+    private fun showAppChrome(pkg:String) {
+        appChrome?.let { runCatching { wm.removeView(it) } }
+        activePackage=pkg
+        val bounds=preferredWindowBounds()
+        val bar=LinearLayout(this).apply {
+            gravity=Gravity.CENTER_VERTICAL
+            setPadding(dp(18),0,dp(14),0)
+            background=rounded(Color.rgb(14,15,18),30)
+            elevation=dp(20).toFloat()
+        }
+        bar.addView(chromeButton("‹", "Send Back") { runRoot("input keyevent 4") })
+        bar.addView(TextView(this).apply {
+            text=packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg,0)).toString()
+            textSize=15f; setTextColor(Color.WHITE); typeface=Typeface.DEFAULT_BOLD; isSingleLine=true
+            setPadding(dp(12),0,dp(8),0)
+        }, LinearLayout.LayoutParams(0,-1,1f))
+        bar.addView(chromeButton("−", "Minimize") { runRoot("input keyevent 3"); hideAppChrome() })
+        bar.addView(chromeButton("□", "Restore size") { relaunchActiveWindow() })
+        bar.addView(chromeButton("×", "Close app") { activePackage?.let { target -> runRoot("am force-stop $target"); hideAppChrome() } })
+        val lp=WindowManager.LayoutParams(bounds.width(),dp(48),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,PixelFormat.TRANSLUCENT).apply {
+            gravity=Gravity.TOP or Gravity.START; x=bounds.left; y=max(dp(4),bounds.top-dp(42))
+        }
+        runCatching { wm.addView(bar,lp); appChrome=bar }
+    }
+
+    private fun chromeButton(symbol:String, description:String, click:()->Unit)=TextView(this).apply {
+        text=symbol; textSize=30f; gravity=Gravity.CENTER; setTextColor(Color.WHITE); contentDescription=description
+        setOnClickListener { click() }
+        layoutParams=LinearLayout.LayoutParams(dp(46),-1)
+    }
+
+    private fun preferredWindowBounds():Rect {
+        val width=resources.displayMetrics.widthPixels
+        val height=resources.displayMetrics.heightPixels
+        val availableWidth=(width*.84f).toInt(); val availableHeight=(height*.74f).toInt()
+        val windowWidth=min(availableWidth,(availableHeight*1.35f).toInt())
+        val windowHeight=min(availableHeight,(windowWidth/.78f).toInt())
+        return Rect((width-windowWidth)/2,(height-windowHeight)/2,(width+windowWidth)/2,(height+windowHeight)/2)
+    }
+
+    private fun relaunchActiveWindow() { activePackage?.let { launchApp(it) } }
+    private fun hideAppChrome() { appChrome?.let { runCatching { wm.removeView(it) } }; appChrome=null }
+    private fun runRoot(command:String) { Thread { runCatching { Runtime.getRuntime().exec(arrayOf("su","-c",command)).waitFor() } }.start() }
+
     private fun closePanel(){panel?.let{runCatching{wm.removeView(it)}};panel=null;panelParams=null}
     private fun rounded(c:Int,r:Int)=GradientDrawable().apply{setColor(c);cornerRadius=dp(r).toFloat()}
     private fun dp(v:Int)=(v*d).toInt()
-    override fun onDestroy(){closePanel();handle?.let{runCatching{wm.removeView(it)}};handle=null;super.onDestroy()}
+    override fun onDestroy(){closePanel();hideAppChrome();handle?.let{runCatching{wm.removeView(it)}};handle=null;super.onDestroy()}
     override fun onBind(intent:Intent?):IBinder?=null
 }
