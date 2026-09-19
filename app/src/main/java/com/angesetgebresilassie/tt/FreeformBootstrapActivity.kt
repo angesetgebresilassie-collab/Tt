@@ -44,9 +44,7 @@ class FreeformBootstrapActivity : Activity() {
         val launch=packageManager.getLaunchIntentForPackage(pkg) ?: run { finish(); return }
         launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK or Intent.FLAG_ACTIVITY_NEW_DOCUMENT or Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT)
 
-        val w=resources.displayMetrics.widthPixels
-        val h=resources.displayMetrics.heightPixels
-        val bounds=android.graphics.Rect((w*.08f).toInt(),(h*.12f).toInt(),(w*.92f).toInt(),(h*.86f).toInt())
+        val bounds=preferredWindowBounds()
         launched=true
 
         try {
@@ -66,5 +64,21 @@ class FreeformBootstrapActivity : Activity() {
             runCatching { startActivity(launch) }
         }
         Handler(Looper.getMainLooper()).postDelayed({ finish() },180)
+    }
+
+    /**
+     * Keep new freeform windows comfortably inset and avoid extreme aspect ratios.
+     * This gives apps a useful starting size without immediately squeezing layouts
+     * that were designed for a more conventional phone or tablet window.
+     */
+    private fun preferredWindowBounds(): android.graphics.Rect {
+        val display=resources.displayMetrics
+        val availableWidth=(display.widthPixels*.84f).toInt()
+        val availableHeight=(display.heightPixels*.74f).toInt()
+        val width=minOf(availableWidth,(availableHeight*1.35f).toInt())
+        val height=minOf(availableHeight,(width/.78f).toInt())
+        val left=(display.widthPixels-width)/2
+        val top=(display.heightPixels-height)/2
+        return android.graphics.Rect(left,top,left+width,top+height)
     }
 }

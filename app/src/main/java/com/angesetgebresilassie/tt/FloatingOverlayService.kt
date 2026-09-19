@@ -79,19 +79,20 @@ class FloatingOverlayService : Service() {
         closePanel()
         val box=LinearLayout(this).apply{
             orientation=LinearLayout.VERTICAL
-            setPadding(dp(12),dp(10),dp(12),dp(12))
-            background=rounded(Color.rgb(248,248,250),26)
+            setPadding(dp(14),dp(12),dp(14),dp(14))
+            background=rounded(Color.rgb(249,250,252),36)
+            elevation=dp(18).toFloat()
         }
         val titleBar=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL; setPadding(dp(2),0,dp(2),dp(8)) }
         titleBar.addView(trafficLight("×", Color.rgb(255,95,86), "Close launcher") { closePanel() })
         titleBar.addView(trafficLight("–", Color.rgb(255,189,46), "Show icons only") {
             compactLauncher=true
-            panelWidth=dp(238); panelHeight=dp(320)
+            panelWidth=compactPanelWidth(); panelHeight=compactPanelHeight()
             showLauncher()
         }, trafficLightLayout())
         titleBar.addView(trafficLight("+", Color.rgb(39,201,63), "Expand launcher") {
             compactLauncher=false
-            panelWidth=dp(340); panelHeight=dp(540)
+            panelWidth=expandedPanelWidth(); panelHeight=expandedPanelHeight()
             showLauncher()
         }, trafficLightLayout())
         titleBar.addView(TextView(this).apply {
@@ -112,7 +113,7 @@ class FloatingOverlayService : Service() {
                 val icon=ImageView(this).apply {
                     setImageDrawable(info.loadIcon(packageManager))
                     contentDescription="Launch ${info.loadLabel(packageManager)}"
-                    background=rounded(Color.WHITE,14)
+                    background=rounded(Color.WHITE,18)
                     setPadding(dp(8),dp(8),dp(8),dp(8))
                     setOnClickListener { launchApp(info.activityInfo.packageName); closePanel() }
                 }
@@ -120,10 +121,10 @@ class FloatingOverlayService : Service() {
             }
             box.addView(grid)
         } else {
-            box.addView(TextView(this).apply{text="Drag the title bar; resize from the lower-right corner";textSize=12f;setTextColor(Color.GRAY);setPadding(dp(6),0,0,dp(8))})
+            box.addView(TextView(this).apply{text="Drag to move · use the lower-right grip to resize";textSize=12f;setTextColor(Color.GRAY);setPadding(dp(6),0,0,dp(10))})
             val list=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL}
             apps.take(80).forEach{info->
-                val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(8),dp(5),dp(8),dp(5));background=rounded(Color.WHITE,16)}
+                val row=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(10),dp(6),dp(10),dp(6));background=rounded(Color.WHITE,20);elevation=dp(1).toFloat()}
                 row.addView(ImageView(this).apply{setImageDrawable(info.loadIcon(packageManager))},LinearLayout.LayoutParams(dp(42),dp(42)))
                 row.addView(TextView(this).apply{text=info.loadLabel(packageManager);textSize=16f;setTextColor(Color.DKGRAY);setPadding(dp(12),0,0,0)},LinearLayout.LayoutParams(0,dp(54),1f))
                 row.setOnClickListener{launchApp(info.activityInfo.packageName);closePanel()}
@@ -133,7 +134,7 @@ class FloatingOverlayService : Service() {
         }
         val resize=TextView(this).apply { text="◢"; textSize=18f; gravity=Gravity.END; setTextColor(Color.GRAY); contentDescription="Resize launcher" }
         box.addView(resize,LinearLayout.LayoutParams(-1,dp(24)))
-        val lp=WindowManager.LayoutParams(if(panelWidth>0) panelWidth else dp(340),if(panelHeight>0) panelHeight else dp(540),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        val lp=WindowManager.LayoutParams(if(panelWidth>0) panelWidth else expandedPanelWidth(),if(panelHeight>0) panelHeight else expandedPanelHeight(),WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,PixelFormat.TRANSLUCENT).apply{gravity=Gravity.TOP or Gravity.END;x=dp(8);y=dp(108)}
         panelWidth=lp.width; panelHeight=lp.height
         panelParams=lp
@@ -148,6 +149,11 @@ class FloatingOverlayService : Service() {
     }
 
     private fun trafficLightLayout()=LinearLayout.LayoutParams(dp(20),dp(20)).apply { leftMargin=dp(6) }
+
+    private fun expandedPanelWidth()=min(dp(380),resources.displayMetrics.widthPixels-dp(24))
+    private fun expandedPanelHeight()=min(dp(600),(resources.displayMetrics.heightPixels*.76f).toInt())
+    private fun compactPanelWidth()=min(dp(250),resources.displayMetrics.widthPixels-dp(24))
+    private fun compactPanelHeight()=min(dp(350),(resources.displayMetrics.heightPixels*.58f).toInt())
 
     private fun installDrag(view:View) { var x=0f; var y=0f
         view.setOnTouchListener { _, event ->
